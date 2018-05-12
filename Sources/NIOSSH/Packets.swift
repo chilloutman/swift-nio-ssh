@@ -30,7 +30,9 @@
 // been negotiated, this field contains the MAC bytes.  Initially,
 // the MAC algorithm MUST be "none".
 
-struct PacketHeader {
+public struct PacketHeader {
+    static let headerLength: Int = MemoryLayout<UInt32>.size + MemoryLayout<UInt8>.size
+    
     let packetLength: UInt32
     let paddingLength: UInt8
     
@@ -54,7 +56,7 @@ extension PacketHeader {
     }
 }
 
-struct Packet {
+public struct Packet {
     let header: PacketHeader
     let payload: [UInt8]
     let padding: [UInt8]
@@ -69,7 +71,7 @@ struct Packet {
 }
 
 extension Packet: Equatable {
-    static func ==(lhs: Packet, rhs: Packet) -> Bool {
+    public static func ==(lhs: Packet, rhs: Packet) -> Bool {
         return lhs.payload == rhs.payload
     }
 }
