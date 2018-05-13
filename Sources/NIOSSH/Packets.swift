@@ -57,16 +57,18 @@ extension PacketHeader {
 }
 
 public struct Packet {
-    let header: PacketHeader
+    let packetLength: UInt32
+    let paddingLength: UInt8
     let payload: [UInt8]
     let padding: [UInt8]
     let mac: [UInt8]
     
     init(payload: [UInt8], padding: [UInt8], mac: [UInt8]) {
-        header = PacketHeader(payloadLength: UInt32(payload.count), paddingLength: UInt8(padding.count))
-        self.payload = payload
-        self.padding = padding
         self.mac = mac
+        self.padding = padding
+        self.payload = payload
+        paddingLength = UInt8(padding.count)
+        packetLength = UInt32(MemoryLayout.size(ofValue: paddingLength)) + UInt32(payload.count) + UInt32(paddingLength)
     }
 }
 
@@ -110,12 +112,35 @@ struct KeyExchange {
     
 }
 
-//extension Array where Element == UInt8 {
-//    init(bytesOf bytes: UInt32) {
-//        self.init(repeating: 0, count: 32/8)
-//        withUnsafeMutableBytes {
-//            $0.storeBytes(of: bytes, as: UInt32.self)
-//        }
-//    }
-//}
+// A string containing a comma-separated list of names.  A name-list
+// is represented as a uint32 containing its length (number of bytes
+// that follow) followed by a comma-separated list of zero or more
+// names.  A name MUST have a non-zero length, and it MUST NOT
+// contain a comma (",").  As this is a list of names, all of the
+// elements contained are names and MUST be in US-ASCII.  Context may
+// impose additional restrictions on the names.  For example, the
+// names in a name-list may have to be a list of valid algorithm
+// identifiers (see Section 6 below), or a list of [RFC3066] language
+// tags.  The order of the names in a name-list may or may not be
+// significant.  Again, this depends on the context in which the list
+// is used.  Terminating null characters MUST NOT be used, neither
+// for the individual names, nor for the list as a whole.
+//
+// Examples:
+//
+// value                      representation (hex)
+// -----                      --------------------
+// (), the empty name-list    00 00 00 00
+// ("zlib")                   00 00 00 04 7a 6c 69 62
+// ("zlib,none")              00 00 00 09 7a 6c 69 62 2c 6e 6f 6e 65
 
+public struct NameList {
+    static let separator = Character(",")
+    let length: UInt32
+    let names: [String]
+
+    init(names: [String]) {
+        self.names = names
+        self.length = UInt32(names.map { $0.utf8.count }.reduce(0, +)) + UInt32(names.count)
+    }
+}

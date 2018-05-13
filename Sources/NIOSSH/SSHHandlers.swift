@@ -1,5 +1,4 @@
 
-import Foundation
 import NIO
 
 private func trace<T>(_ self: T, function: String = #function) {
