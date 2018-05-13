@@ -1,61 +1,84 @@
 
 import NIO
+import class Dispatch.DispatchQueue
+
+public protocol SSHClientDelegate: class {
+    func connected(client: SSHClient)
+    func closed(client: SSHClient)
+    func error(client: SSHClient, error: Error)
+}
 
 public class SSHClient {
-    public init() {
-        
-    }
 
-    private let group = MultiThreadedEventLoopGroup(numThreads: 1)
-    private var channel: Channel?
-    
-    public func connect(host: String, port: Int, callback: @escaping (ConnectResult) -> ()) {
-        let bootstrap = ClientBootstrap(group: group)
-            .channelInitializer { channel in
-                channel.pipeline.addHandlers(
-                    ProtocolVersionExchangeHandler(),
-                    PackedDecoder(),
-                    PacketHandler(),
-                    first: false)
-            }
+    public weak var delegate: SSHClientDelegate?
+    private let queue: DispatchQueue
 
-        do {
-            channel = try bootstrap.connect(host: host, port: port).wait()
-            callback(.connected)
-        } catch {
-            callback(.error(error))
-        }
+    private let group: EventLoopGroup
+    private let bootstrap: ClientBootstrap
 
-//        let futureChannel = bootstrap.connect(host: host, port: port)
-//        futureChannel.whenSuccess { [unowned self] in
-//            self.channel = $0
-//            callback(.connected)
-//        }
-//        futureChannel.whenFailure { callback(.error($0)) }
-    }
-
-    public func close (callback: @escaping (CloseResult) -> ()) {
-        group.shutdownGracefully {
-            if let error = $0 {
-                callback(.error(error))
-            } else {
-                callback(.closed)
+    private var state: State = State.idle {
+        didSet {
+            print("SSHClient.state = \(state)")
+            queue.async { [weak self] in
+                guard let client = self, let delegate = client.delegate else { return }
+                switch client.state {
+                case .connected(_):
+                    delegate.connected(client: client)
+                case .idle:
+                    delegate.closed(client: client)
+                }
             }
         }
     }
-    
-    public func wait () {
-        try! channel?.closeFuture.wait()
+
+    private enum State {
+        case idle
+        case connected(Channel)
     }
 
-    public enum ConnectResult {
-        case connected
-        case error(Error)
+    public init(queue: DispatchQueue = DispatchQueue.main) {
+        group = MultiThreadedEventLoopGroup(numThreads: 1)
+        bootstrap = ClientBootstrap(group: group)
+            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .channelInitializer(initializeChannel)
+        self.queue = queue
     }
 
-    public enum CloseResult {
-        case closed
-        case error(Error)
+    public func connect(host: String, port: Int) {
+        guard case .idle = state else { preconditionFailure() }
+
+        let channelFuture = bootstrap.connect(host: host, port: port)
+
+        channelFuture.whenSuccess { channel in
+            channel.closeFuture.whenComplete { self.state = .idle }
+            self.state = .connected(channel)
+        }
+        channelFuture.whenFailure(handleError)
     }
 
+    public func close () {
+        if case .connected(let channel) = state {
+            channel.close(mode: .all, promise: nil)
+        }
+    }
+
+    func handleError(_ error: Error) {
+        queue.sync {
+            delegate?.error(client: self, error: error)
+            self.close()
+        }
+    }
+
+    deinit {
+        try! group.syncShutdownGracefully()
+    }
+
+}
+
+private func initializeChannel(_ channel: Channel) -> EventLoopFuture<Void> {
+    return channel.pipeline.addHandlers(
+        ProtocolVersionExchangeHandler(),
+        PackedDecoder(),
+        PacketHandler(),
+        first: false)
 }
