@@ -58,4 +58,18 @@ class NameListTest: XCTestCase {
 
         XCTAssertEqual(bytes, [0, 0, 0, 0])
     }
+
+    func testEmptyFromBytes() throws {
+        let nameList: NameList = try requireNotNil(NameList(bytes: [0, 0, 0, 0]), name: "nameList")
+
+        let emptyNameList = NameList(names: [])
+        XCTAssertEqual(nameList, emptyNameList)
+    }
+
+    func testFromBytes() throws {
+        let nameList: NameList = try requireNotNil(NameList(bytes: [0, 0, 0, 4, 0x7a, 0x6c, 0x69, 0x62]), name: "nameList")
+
+        let emptyNameList = NameList(names: ["zlib"])
+        XCTAssertEqual(nameList, emptyNameList)
+    }
 }

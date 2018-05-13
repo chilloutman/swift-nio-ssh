@@ -82,16 +82,22 @@ public class PacketHandler: ChannelInboundHandler {
 
         let packet: Packet = unwrapInboundIn(data)
 
-        // TODO payload decoder
-        // TODO name-list decoder
-
+        // TODO kex decoder
         let kexHeaderLength = 17
-        let nameListHeaderLength = 4
 
-        let payload = packet.payload[(kexHeaderLength + nameListHeaderLength)...].withUnsafeBufferPointer {
-            String.decodeCString($0.baseAddress, as: UTF8.self, repairingInvalidCodeUnits: true)
-        }
+        var buffer = ctx.channel.allocator.buffer(capacity: packet.payload.count)
+        // TODO how inneficient is this if at all?
+        buffer.write(bytes: packet.payload)
+        buffer.moveReaderIndex(forwardBy: kexHeaderLength)
 
-        print(payload ?? "<empty payload>")
+        let nameList = NameList(readFrom: &buffer)
+        print(nameList ?? "<empty name list>")
+
+
+//        let payload = packet.payload[(kexHeaderLength + nameListHeaderLength)...].withUnsafeBufferPointer {
+//            String.decodeCString($0.baseAddress, as: UTF8.self, repairingInvalidCodeUnits: true)
+//        }
+//
+//        print(nameList ?? "<empty payload>")
     }
 }

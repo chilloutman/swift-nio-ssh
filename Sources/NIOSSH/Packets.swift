@@ -68,7 +68,7 @@ public struct Packet {
         self.padding = padding
         self.payload = payload
         paddingLength = UInt8(padding.count)
-        packetLength = UInt32(MemoryLayout.size(ofValue: paddingLength)) + UInt32(payload.count) + UInt32(paddingLength)
+        packetLength = 1 + UInt32(payload.count) + UInt32(padding.count)
     }
 }
 
@@ -142,5 +142,38 @@ public struct NameList {
     init(names: [String]) {
         self.names = names
         self.length = UInt32(names.map { $0.utf8.count }.reduce(0, +)) + UInt32(names.count)
+    }
+
+    // TODO Find clean way to use ByteBuffer all the way and avoid stuff like this
+    init?(bytes: [UInt8]) {
+        guard bytes.count >= 4 else { return nil }
+
+        length = bytes.withUnsafeBufferPointer {
+            $0.baseAddress!.withMemoryRebound(to: UInt32.self, capacity: 1) {
+                UInt32(bigEndian: $0.pointee)
+            }
+        }
+
+        guard bytes.count == UInt32(4) + length else { return nil }
+
+        let namesList = String(decoding: bytes.dropFirst(4), as: UTF8.self)
+        names = namesList.split(separator: NameList.separator).map(String.init)
+    }
+
+//    func bytes() -> [UInt8] {
+//        var bytes = [UInt8](repeating: 0, count: 4 + Int(self.length))
+//        var pointer = UnsafeMutablePointer(mutating: bytes)
+//
+//        var length = self.length
+//        withUnsafeBytes(of: &length) {
+//            pointer.
+//            $0.
+//        }
+//    }
+}
+
+extension NameList: Equatable {
+    public static func ==(lhs: NameList, rhs: NameList) -> Bool {
+        return lhs.names == rhs.names
     }
 }
